@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Database container for ECS Cluster
+
+Resources:
+
+  DatabaseTaskDefinition:
+     Type: AWS::ECS::TaskDefinition
+     Properties:
+       ExecutionRoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/ecsTaskExecutionRole'
+       Cpu: 256
+       Memory: 512
+       NetworkMode: awsvpc
+       RequiresCompatibilities:
+         - FARGATE
+       ContainerDefinitions:
+         - Name: mongo
+           Image: mongo
+           Environment:
+             - Name: MONGO_INITDB_DATABASE
+               Value: mongo
+             - Name: MONGO_INITDB_ROOT_USERNAME
+               Value: admin
+             - Name: MONGO_INITDB_ROOT_PASSWORD
+               Value: pass
+           PortMappings:
+             - ContainerPort: 27017
+               Protocol: tcp
+           LogConfiguration:
+             LogDriver: awslogs
+             Options:
+                awslogs-region: !Ref AWS::Region
+                awslogs-stream-prefix: 'database'
+                awslogs-group: 'logsApp'
+
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      TaskDefinition: !Ref DatabaseTaskDefinition
+      Cluster: !ImportValue 'Cluster'
+      LaunchType: FARGATE
+      DesiredCount: 1
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !ImportValue 'PublicSubnet1'
+            - !ImportValue 'PublicSubnet2'
+          SecurityGroups:
+            - !Ref DatabaseSecurityGroup
+      LoadBalancers:
+        - ContainerName: mongo
+          ContainerPort: 27017
+          TargetGroupArn: !ImportValue 'NetworkLoadBalancerTargetGroup'
+
+
+  
+
+
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for the database
+      VpcId: !ImportValue 'VPC'
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          CidrIp: '10.0.0.0/16'
+
+
+   
+   

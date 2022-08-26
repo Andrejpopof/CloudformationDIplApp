@@ -1,0 +1,141 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Cluster on ECS and ALB
+
+Resources:
+  
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: 'andrej-internCluster'
+
+  
+  LBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref Loadbalancer
+      Protocol: HTTP
+      Port: 80
+      DefaultActions:
+        #  - Type: forward
+        #    TargetGroupArn: !ImportValue 'FrontendTargetGroup'
+        - Type: fixed-response
+          FixedResponseConfig: 
+              ContentType: text/plain
+              StatusCode: 200
+
+
+
+  LBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for alb 
+      VpcId: !ImportValue 'VPC'
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+  Loadbalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: 'andrej-alb'
+      Subnets:
+        - !ImportValue 'PublicSubnet1'
+        - !ImportValue 'PublicSubnet2'
+      SecurityGroups:
+        - !Ref LBSecurityGroup
+
+
+
+  ContainerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !ImportValue 'VPC'
+      GroupDescription: security group for the containers
+      SecurityGroupIngress:
+        - SourceSecurityGroupId: !Ref 'LBSecurityGroup'
+          IpProtocol: -1
+
+
+
+  NetworkLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: 'andrej-nlb'
+      Scheme: internal
+      Subnets:
+        - !ImportValue 'PublicSubnet1'
+        - !ImportValue 'PublicSubnet2'
+      Type: network
+
+
+
+  NetworkLoadBalancerTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: nlbTG
+      VpcId: !ImportValue 'VPC'
+      Protocol: 'TCP'
+      Port: '27017'
+      HealthCheckEnabled: True
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPort: 27017
+      HealthCheckProtocol: TCP
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 3
+      TargetType: ip
+
+
+  NetworkLbListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref NetworkLoadBalancer
+      Protocol: TCP
+      Port: 27017
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref NetworkLoadBalancerTargetGroup
+
+  CloudwatchLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: 'logsApp'
+      RetentionInDays: 1
+
+Outputs:
+
+  Cluster:
+    Value: !Ref Cluster
+    Export:
+      Name: 'Cluster'
+
+  Listener:
+    Value: !Ref LBListener
+    Export:
+      Name: 'Listener'
+
+  NetworkListener: 
+    Value: !Ref NetworkLbListener
+    Export:
+      Name: 'NetworkLbListener'
+
+  ContainerSecurityGroup:
+    Value: !Ref ContainerSecurityGroup
+    Export:
+      Name: 'ContainerSecurityGroup'
+
+  LoadBalancerDNS:
+    Value: !GetAtt Loadbalancer.DNSName
+    Export:
+      Name: 'DomainName'
+
+  NetworkLoadBalancerDNS:
+    Value: !GetAtt NetworkLoadBalancer.DNSName
+    Export:
+      Name: 'NLBDomainName'
+
+  NetworkLoadBalancerTargetGroup:
+    Value: !Ref NetworkLoadBalancerTargetGroup
+    Export:
+      Name: 'NetworkLoadBalancerTargetGroup'
+
+ 
